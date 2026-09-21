@@ -1584,6 +1584,7 @@
         <input class="text-input question-search" id="questionSearch" type="search" placeholder="搜索题目、关键词，例如 education">
         <div class="filter-row" id="questionFilters">
           <button type="button" class="filter-chip active" data-question-filter="all">全部</button>
+          <button type="button" class="filter-chip" data-question-filter="official">官方真题</button>
           <button type="button" class="filter-chip" data-question-filter="writing">写作</button>
           <button type="button" class="filter-chip" data-question-filter="speaking">口语</button>
           <button type="button" class="filter-chip" data-question-filter="reading">阅读</button>
@@ -1772,6 +1773,7 @@
   </svg>
   <script src="data/questions.js"></script>
   <script src="data/models.js"></script>
+  <script src="data/resources.js"></script>
   <script>
     (() => {
       "use strict";
@@ -1869,6 +1871,13 @@
       ];
       const GENERATED_QUESTIONS = Array.isArray(globalThis.GENERATED_QUESTIONS) ? globalThis.GENERATED_QUESTIONS : [];
       const GENERATED_MODELS = Array.isArray(globalThis.GENERATED_MODELS) ? globalThis.GENERATED_MODELS : [];
+      const GENERATED_RESOURCES = globalThis.GENERATED_RESOURCES || { readings: [], listenings: [] };
+      const GENERATED_FULL_RESOURCES = [...(GENERATED_RESOURCES.readings || []), ...(GENERATED_RESOURCES.listenings || [])];
+      const OFFICIAL_RESOURCES = [
+        { id: "official-ielts", type: "official", title: "IELTS 官方样题", skill: "IELTS.org", prompt: "IELTS 官方 Sample Test Questions，可按听说读写分别练习。", sourceUrl: "https://ielts.org/take-a-test/preparation-resources/sample-test-questions", channels: ["writing", "reading", "listening", "speaking"] },
+        { id: "official-bc", type: "official", title: "British Council 免费练习题", skill: "British Council", prompt: "British Council 官方免费 IELTS 练习题与模拟测试。", sourceUrl: "https://takeielts.britishcouncil.org/take-ielts/prepare/free-ielts-practice-tests", channels: ["writing", "reading", "listening", "speaking"] },
+        { id: "official-idp", type: "official", title: "IDP 免费练习题", skill: "IDP IELTS", prompt: "IDP 官方免费 IELTS 练习资源。", sourceUrl: "https://ielts.idp.com/prepare/free-practice-tests", channels: ["writing", "reading", "listening", "speaking"] }
+      ];
 
       const $ = (selector, root = document) => root.querySelector(selector);
       const track = $("#trainingTrack");
@@ -2361,17 +2370,23 @@
         }));
         const fullResources = QUESTION_BANK.filter((item) => item.long);
         const coreResources = QUESTION_BANK.filter((item) => !item.long);
-        return [...fullResources, ...external, ...coreResources, ...GENERATED_QUESTIONS, ...state.imports.map((item) => ({ ...item, custom: true }))];
+        const generatedWriting = GENERATED_QUESTIONS.filter((item) => item.type === "writing").slice(0, 80);
+        const generatedSpeaking = GENERATED_QUESTIONS.filter((item) => item.type === "speaking");
+        return [...fullResources, ...GENERATED_FULL_RESOURCES, ...OFFICIAL_RESOURCES, ...external, ...coreResources, ...generatedSpeaking, ...generatedWriting, ...state.imports.map((item) => ({ ...item, custom: true }))];
       }
 
       function renderQuestionBank() {
         const filter = $(".filter-chip.active")?.dataset.questionFilter || "all";
         const search = $("#questionSearch").value.trim().toLowerCase();
         const allItems = getLibraryItems();
-        const filtered = allItems.filter((item) => (filter === "all" || (filter === "custom" ? item.custom : item.type === filter))
-          && (!search || `${item.title} ${item.prompt} ${item.skill || ""}`.toLowerCase().includes(search)));
+        const filtered = allItems.filter((item) => {
+          const matchesFilter = filter === "all"
+            || (filter === "custom" ? item.custom : (item.type === filter || (item.channels || []).includes(filter)));
+          const matchesSearch = !search || `${item.title} ${item.prompt} ${item.skill || ""}`.toLowerCase().includes(search);
+          return matchesFilter && matchesSearch;
+        });
         const items = filtered.slice(0, questionVisibleCount);
-        const labels = { writing: "写作", speaking: "口语", reading: "阅读", listening: "听力", mistake: "错题", custom: "我的资料" };
+        const labels = { writing: "写作", speaking: "口语", reading: "阅读", listening: "听力", official: "官方真题", mistake: "错题", custom: "我的资料" };
         $("#questionCount").textContent = `${filtered.length} / ${allItems.length} 题`;
         $("#questionMore").hidden = items.length >= filtered.length;
         $("#questionList").innerHTML = items.length ? items.map((item) => `
@@ -2383,7 +2398,7 @@
             ${item.questions ? `<p style="margin-top:12px"><strong>Questions</strong><br>${escapeHtml(item.questions)}</p>` : ""}
             ${item.answers ? `<details><summary>查看参考答案</summary><p>${escapeHtml(item.answers)}</p></details>` : ""}
             <div class="question-actions">
-              <button class="button button-blue" type="button" data-question-action="start" data-question-id="${item.id}">开始训练</button>
+              ${item.official ? "" : `<button class="button button-blue" type="button" data-question-action="start" data-question-id="${item.id}">开始训练</button>`}
               <button class="button button-secondary" type="button" data-question-action="copy" data-question-id="${item.id}">复制题目</button>
               ${item.sourceUrl ? `<a class="button button-secondary" href="${escapeHtml(item.sourceUrl)}" target="_blank" rel="noopener noreferrer">打开原练习</a>` : ""}
               ${item.type === "listening" && !item.audio ? `<button class="button button-secondary" type="button" data-question-action="play" data-question-id="${item.id}">播放听力</button>` : ""}

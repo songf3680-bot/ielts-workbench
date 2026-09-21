@@ -36,7 +36,7 @@ Used mostly on a phone in short, recurring sessions over months or years. A sess
 - Provide a mobile-first four-tab structure: Today, Training, AI Feedback, and Library.
 - Send writing or speaking transcripts to DeepSeek when the user supplies an API key; never embed or ship a key in the page.
 - Provide original IELTS practice questions, original annotated 7–8 band model answers, browser speech playback for listening prompts, and importing of personal material.
-- Ship a searchable bank of 1,300 practice items and a library of 100 annotated model answers, with pagination so large libraries remain usable on a phone.
+- Ship a searchable bank of 600+ visible practice items, 100 annotated model answers, 13 reading resources and 23 listening resources after keeping the generated writing set deliberately small. Official IELTS, British Council and IDP sample-test links are included instead of copying copyrighted papers.
 - Include three original full reading passages with eight questions and answer keys each, plus three original narrated listening exercises with eight questions each and MP3 playback.
 - Curate official DailyDictation short-story audio links with attribution and links back to the original exercises; do not republish third-party lesson audio inside the repository.
 - Export all local workbench data as a JSON backup and import it again; API keys are intentionally excluded from backups.
