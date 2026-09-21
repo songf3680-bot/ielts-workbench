@@ -1302,7 +1302,9 @@
     .filter-chip.active { border-color: var(--ink); background: var(--ink); color: #fff; }
     .library-panel { display: none; }
     .library-panel.active { display: block; }
+    .question-search { margin-bottom: 14px; }
     .filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+    .library-count { margin-left: auto; color: var(--muted); font-size: .78rem; font-weight: 700; }
 
     .question-list,
     .sample-list { display: grid; gap: 12px; }
@@ -1579,6 +1581,7 @@
         <button type="button" data-library-tab="import">导入</button>
       </div>
       <div class="library-panel active" data-library-panel="questions">
+        <input class="text-input question-search" id="questionSearch" type="search" placeholder="搜索题目、关键词，例如 education">
         <div class="filter-row" id="questionFilters">
           <button type="button" class="filter-chip active" data-question-filter="all">全部</button>
           <button type="button" class="filter-chip" data-question-filter="writing">写作</button>
@@ -1586,11 +1589,16 @@
           <button type="button" class="filter-chip" data-question-filter="reading">阅读</button>
           <button type="button" class="filter-chip" data-question-filter="listening">听力</button>
           <button type="button" class="filter-chip" data-question-filter="custom">我的导入</button>
+          <span class="library-count" id="questionCount"></span>
         </div>
         <div class="question-list" id="questionList"></div>
+        <button class="button button-secondary" type="button" id="questionMore" hidden>显示更多题目</button>
       </div>
       <div class="library-panel" data-library-panel="samples">
+        <input class="text-input question-search" id="sampleSearch" type="search" placeholder="搜索范文主题或关键词">
+        <div class="filter-row"><span class="library-count" id="sampleCount"></span></div>
         <div class="sample-list" id="sampleList"></div>
+        <button class="button button-secondary" type="button" id="sampleMore" hidden>显示更多范文</button>
       </div>
       <div class="library-panel" data-library-panel="import">
         <form class="panel import-stack" id="importForm">
@@ -1762,6 +1770,8 @@
       </symbol>
     </defs>
   </svg>
+  <script src="data/questions.js"></script>
+  <script src="data/models.js"></script>
   <script>
     (() => {
       "use strict";
@@ -1857,6 +1867,8 @@
         { id: "dd-5", title: "My house · DailyDictation", audio: "https://dailydictation.com/upload/general-english/5-my-house-2019-03-15-01-15-48/0-5-my-house.mp3", sourceUrl: "https://dailydictation.com/exercises/short-stories/5-my-house.8/listen-and-type" },
         { id: "dd-6", title: "My first pet · DailyDictation", audio: "https://dailydictation.com/upload/general-english/6-my-first-pet-2019-03-15-01-18-08/0-6-my-first-pet.mp3", sourceUrl: "https://dailydictation.com/exercises/short-stories/6-my-first-pet.9/listen-and-type" }
       ];
+      const GENERATED_QUESTIONS = Array.isArray(globalThis.GENERATED_QUESTIONS) ? globalThis.GENERATED_QUESTIONS : [];
+      const GENERATED_MODELS = Array.isArray(globalThis.GENERATED_MODELS) ? globalThis.GENERATED_MODELS : [];
 
       const $ = (selector, root = document) => root.querySelector(selector);
       const track = $("#trainingTrack");
@@ -1880,6 +1892,8 @@
       let timerHandle = null;
       let toastHandle = null;
       let currentAiResult = "";
+      let questionVisibleCount = 20;
+      let sampleVisibleCount = 10;
 
       function freshState() {
         const tasks = {};
@@ -2270,6 +2284,17 @@
           const button = event.target.closest("[data-question-filter]");
           if (!button) return;
           document.querySelectorAll("[data-question-filter]").forEach((item) => item.classList.toggle("active", item === button));
+          questionVisibleCount = 20;
+          renderQuestionBank();
+        });
+
+        $("#questionSearch").addEventListener("input", () => {
+          questionVisibleCount = 20;
+          renderQuestionBank();
+        });
+
+        $("#questionMore").addEventListener("click", () => {
+          questionVisibleCount += 20;
           renderQuestionBank();
         });
 
@@ -2319,6 +2344,14 @@
 
         renderQuestionBank();
         renderSamples();
+        $("#sampleSearch").addEventListener("input", () => {
+          sampleVisibleCount = 10;
+          renderSamples();
+        });
+        $("#sampleMore").addEventListener("click", () => {
+          sampleVisibleCount += 10;
+          renderSamples();
+        });
       }
 
       function getLibraryItems() {
@@ -2326,13 +2359,21 @@
           ...item, type: "listening", skill: "外部官方音源", external: true,
           prompt: "DailyDictation 官方短故事音频。可直接播放，也可以打开原练习完成听写。"
         }));
-        return [...QUESTION_BANK, ...external, ...state.imports.map((item) => ({ ...item, custom: true }))];
+        const fullResources = QUESTION_BANK.filter((item) => item.long);
+        const coreResources = QUESTION_BANK.filter((item) => !item.long);
+        return [...fullResources, ...external, ...coreResources, ...GENERATED_QUESTIONS, ...state.imports.map((item) => ({ ...item, custom: true }))];
       }
 
       function renderQuestionBank() {
         const filter = $(".filter-chip.active")?.dataset.questionFilter || "all";
-        const items = getLibraryItems().filter((item) => filter === "all" || (filter === "custom" ? item.custom : item.type === filter));
+        const search = $("#questionSearch").value.trim().toLowerCase();
+        const allItems = getLibraryItems();
+        const filtered = allItems.filter((item) => (filter === "all" || (filter === "custom" ? item.custom : item.type === filter))
+          && (!search || `${item.title} ${item.prompt} ${item.skill || ""}`.toLowerCase().includes(search)));
+        const items = filtered.slice(0, questionVisibleCount);
         const labels = { writing: "写作", speaking: "口语", reading: "阅读", listening: "听力", mistake: "错题", custom: "我的资料" };
+        $("#questionCount").textContent = `${filtered.length} / ${allItems.length} 题`;
+        $("#questionMore").hidden = items.length >= filtered.length;
         $("#questionList").innerHTML = items.length ? items.map((item) => `
           <article class="question-card">
             <div class="question-meta"><span>${labels[item.type] || "资料"}</span><span>${escapeHtml(item.skill || "")}</span></div>
@@ -2351,7 +2392,13 @@
       }
 
       function renderSamples() {
-        $("#sampleList").innerHTML = MODEL_ANSWERS.map((sample) => `
+        const allSamples = [...MODEL_ANSWERS, ...GENERATED_MODELS];
+        const search = $("#sampleSearch").value.trim().toLowerCase();
+        const filtered = allSamples.filter((sample) => !search || `${sample.title} ${sample.prompt} ${sample.essay}`.toLowerCase().includes(search));
+        const samples = filtered.slice(0, sampleVisibleCount);
+        $("#sampleCount").textContent = `${filtered.length} 篇范文`;
+        $("#sampleMore").hidden = samples.length >= filtered.length;
+        $("#sampleList").innerHTML = samples.map((sample) => `
           <article class="sample-card">
             <div class="sample-meta"><span>${sample.band}</span><span>${sample.type === "speaking" ? "口语" : "写作"}</span></div>
             <h3>${escapeHtml(sample.title)}</h3>
@@ -2359,7 +2406,7 @@
             <details>
               <summary>展开范文与标注</summary>
               <div class="sample-essay">${escapeHtml(sample.essay)}</div>
-              <ul class="annotation-list">${sample.annotations.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
+              <ul class="annotation-list">${(sample.annotations || []).map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
             </details>
           </article>`).join("");
       }

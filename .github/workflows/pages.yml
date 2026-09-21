@@ -28,6 +28,7 @@ jobs:
           mkdir -p site
           cp outputs/ielts-workbench.html site/index.html
           cp -R outputs/audio site/audio
+          cp -R outputs/data site/data
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
