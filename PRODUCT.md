@@ -36,6 +36,7 @@ Used mostly on a phone in short, recurring sessions over months or years. A sess
 - Provide a mobile-first four-tab structure: Today, Training, AI Feedback, and Library.
 - Send writing or speaking transcripts to DeepSeek when the user supplies an API key; never embed or ship a key in the page.
 - Provide original IELTS practice questions, original annotated 7–8 band model answers, browser speech playback for listening prompts, and importing of personal material.
+- Export all local workbench data as a JSON backup and import it again; API keys are intentionally excluded from backups.
 - Persist all user data locally with browser storage.
 - Estimated facts: the initial target is 7.0, daily task copy is a balanced starter routine, and the UI language is Simplified Chinese.
 
