@@ -1348,6 +1348,9 @@
 
     .import-stack { display: grid; gap: 18px; }
     .file-input { width: 100%; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--paper); }
+    .atlas-import { display: grid; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .atlas-import h3 { margin: 0; font-size: 1rem; }
+    .atlas-import p { margin: 0; color: var(--muted); font-size: .84rem; }
 
     @keyframes page-in {
       from { opacity: 0; transform: translateY(8px); }
@@ -1628,6 +1631,15 @@
           批量导入 .txt / .md / .json
           <input type="file" id="importFile" accept=".txt,.md,.json" multiple>
         </label>
+        <div class="atlas-import">
+          <h3>IELTS Atlas 本地题库</h3>
+          <p>选择你已下载的 <code>assets/generated/reading-exams</code> 文件夹。题目只保存在当前浏览器，不会上传，也不会进入公开仓库。</p>
+          <label class="file-input">
+            选择 IELTS Atlas 题库文件夹
+            <input type="file" id="atlasFolder" webkitdirectory multiple>
+          </label>
+          <a class="button button-secondary" href="https://github.com/sallowayma-git/IELTS-practice" target="_blank" rel="noopener noreferrer">打开 IELTS Atlas 仓库</a>
+        </div>
       </div>
     </section>
   </main>
@@ -1943,8 +1955,10 @@
           status.textContent = "刚刚保存";
           clearTimeout(saveState.handle);
           saveState.handle = setTimeout(() => { status.textContent = "已自动保存"; }, 1200);
+          return true;
         } catch {
           $("#storageStatus").textContent = "当前浏览器未允许保存";
+          return false;
         }
       }
 
@@ -1982,6 +1996,80 @@
           showToast("备份已导入");
         } catch (error) {
           showToast(`导入失败：${error.message}`);
+        } finally {
+          event.target.value = "";
+        }
+      }
+
+      function atlasHtmlToText(value) {
+        if (!value) return "";
+        const documentFragment = new DOMParser().parseFromString(String(value), "text/html");
+        return documentFragment.body.textContent.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+      }
+
+      function parseAtlasManifest(code) {
+        let manifest = null;
+        const sandbox = { registerReadingExamManifest(value) { manifest = value; } };
+        new Function("window", "globalThis", code)(sandbox, sandbox);
+        return manifest;
+      }
+
+      function parseAtlasExam(code) {
+        let data = null;
+        const sandbox = { __READING_EXAM_DATA__: { register(id, value) { data = value; } } };
+        new Function("window", "globalThis", code)(sandbox, sandbox);
+        return data;
+      }
+
+      async function importAtlasFolder(event) {
+        const files = [...event.target.files];
+        if (!files.length) return;
+        const manifestFile = files.find((file) => file.name === "manifest.js");
+        if (!manifestFile) {
+          showToast("没有找到 manifest.js，请选择 assets/generated/reading-exams 文件夹");
+          return;
+        }
+
+        try {
+          showToast("正在读取 IELTS Atlas 本地题库…");
+          const manifest = parseAtlasManifest(await manifestFile.text());
+          if (!manifest) throw new Error("manifest.js 格式不正确");
+          const fileMap = new Map(files.map((file) => [file.name, file]));
+          const imported = [];
+
+          for (const entry of Object.values(manifest)) {
+            const filename = String(entry.script || "").split("/").pop();
+            const file = fileMap.get(filename);
+            if (!file) continue;
+            const data = parseAtlasExam(await file.text());
+            if (!data?.passage?.blocks) continue;
+            const passage = data.passage.blocks.map((block) => atlasHtmlToText(block.html || block.text || "")).filter(Boolean).join("\n\n");
+            const groups = data.questionGroups || data.groups || [];
+            const questions = groups.map((group) => atlasHtmlToText(group.bodyHtml || group.html || "")).filter(Boolean).join("\n\n");
+            const order = data.questionOrder || Object.keys(data.answerKey || {});
+            const display = data.questionDisplayMap || {};
+            const answers = order.map((id) => `${display[id] || id}. ${data.answerKey?.[id] || ""}`).join("\n");
+            imported.push({
+              id: `atlas-${data.examId || entry.examId}`, custom: true, type: "reading", long: true,
+              skill: `IELTS Atlas · ${data.meta?.category || entry.category || "Reading"}`,
+              title: `${data.meta?.title || entry.title} · 本地导入`, prompt: passage, questions, answers,
+              note: "IELTS Atlas 本地导入，仅供个人学习使用。"
+            });
+          }
+
+          if (!imported.length) throw new Error("没有可导入的阅读题");
+          const backup = [...state.imports];
+          const ids = new Set(imported.map((item) => item.id));
+          state.imports = [...state.imports.filter((item) => !ids.has(item.id)), ...imported];
+          if (!saveState()) {
+            state.imports = backup;
+            throw new Error("浏览器存储空间不足，请分批导入");
+          }
+          renderQuestionBank();
+          switchTab("library");
+          showToast(`已本地导入 ${imported.length} 套 IELTS Atlas 阅读题`);
+        } catch (error) {
+          showToast(`IELTS Atlas 导入失败：${error.message}`);
         } finally {
           event.target.value = "";
         }
@@ -2350,6 +2438,8 @@
           event.target.value = "";
           showToast(`已导入 ${files.length} 个文件`);
         });
+
+        $("#atlasFolder").addEventListener("change", importAtlasFolder);
 
         renderQuestionBank();
         renderSamples();
@@ -2779,7 +2869,10 @@
           ["duration format", formatDuration(65) === "01:05"],
           ["html escape", escapeHtml("<") === "&lt;"],
           ["module set", Object.keys(MODULES).length === 4],
-          ["backup shape", buildBackup().app === "ielts-workbench" && buildBackup().data === state]
+          ["backup shape", buildBackup().app === "ielts-workbench" && buildBackup().data === state],
+          ["atlas manifest parser", parseAtlasManifest('(function(g){g.registerReadingExamManifest({x:{examId:"x",script:"./x.js"}})})(window);')?.x?.examId === "x"],
+          ["atlas exam parser", parseAtlasExam('(function(g){g.__READING_EXAM_DATA__.register("x",{examId:"x"})})(window);')?.examId === "x"],
+          ["atlas html parser", atlasHtmlToText("<p>Hello <strong>world</strong></p>") === "Hello world"]
         ];
         checks.forEach(([label, passed]) => console.assert(passed, `IELTS workbench self-check failed: ${label}`));
         const passed = checks.every(([, value]) => value);
